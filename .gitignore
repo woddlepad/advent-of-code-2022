@@ -1,0 +1,12 @@
+target
+
+# rust stuff
+*.rs.bk
+
+# vscode
+.vscode
+.vscode-test
+
+
+# macos
+.DS_Store
