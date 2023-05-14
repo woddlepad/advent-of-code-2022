@@ -15,10 +15,10 @@ impl<'a> fmt::Debug for PrettyNode<'a> {
 
         match &node.value {
             FileSystemItem::Directory(dir) => {
-                writeln!(f, "- {} (dir size={}) ", dir.name, node.calc_size())
+                writeln!(f, "- {} (dir size={}) ", dir.name, node.calc_size())?
             }
             FileSystemItem::File(file) => {
-                writeln!(f, "- {} (file, size={})", file.name, file.size,)
+                writeln!(f, "- {} (file, size={})", file.name, file.size,)?
             }
         };
 
@@ -84,6 +84,7 @@ impl<T> Node<T> {
 
     fn add(&mut self, value: T, self_ref: RcMutPointer<Node<T>>) {
         let node_ref: Rc<RefCell<Node<T>>> = Node::new(value).into();
+
         node_ref.borrow_mut().parent = Some(Rc::downgrade(&self_ref));
 
         self.children.push(node_ref);
@@ -91,7 +92,7 @@ impl<T> Node<T> {
 }
 
 impl Node<FileSystemItem> {
-    fn find_child(&self, name: &str) -> RcMutPointer<Node<FileSystemItem>> {
+    fn get_sub_dir(&self, name: &str) -> RcMutPointer<Node<FileSystemItem>> {
         match &self.value {
             FileSystemItem::File(_) => panic!(),
             FileSystemItem::Directory(_) => self
@@ -118,7 +119,7 @@ impl Node<FileSystemItem> {
         }
     }
 
-    fn get_flat_dirs(&self) -> Vec<SizedDirectory> {
+    fn list_all_dirs_sized_flat(&self) -> Vec<SizedDirectory> {
         let mut dirs = vec![];
         match &self.value {
             FileSystemItem::File(_) => {}
@@ -132,7 +133,7 @@ impl Node<FileSystemItem> {
                     .children
                     .iter()
                     .flat_map(|node: &RcMutPointer<Node<FileSystemItem>>| {
-                        node.borrow().get_flat_dirs()
+                        node.borrow().list_all_dirs_sized_flat()
                     })
                     .collect();
                 dirs.append(&mut child_dirs);
@@ -159,7 +160,7 @@ fn parse_file_system_entry(commands: Vec<Command>) -> RcMutPointer<Node<FileSyst
                         current_node = parent.upgrade().unwrap();
                     }
                     path => {
-                        let child = current_node.borrow().find_child(path).clone();
+                        let child = current_node.borrow().get_sub_dir(path).clone();
                         current_node = child;
                     }
                 }
@@ -167,15 +168,14 @@ fn parse_file_system_entry(commands: Vec<Command>) -> RcMutPointer<Node<FileSyst
             "ls" => {
                 for line in command.output {
                     let args: Vec<&str> = line.split(" ").collect();
-
                     match args[0] {
-                        "dir" => (*current_node).borrow_mut().add(
+                        "dir" => current_node.borrow_mut().add(
                             FileSystemItem::Directory(Directory {
                                 name: args[1].to_string(),
                             }),
                             current_node.clone(),
                         ),
-                        _ => (*current_node).borrow_mut().add(
+                        _ => current_node.borrow_mut().add(
                             FileSystemItem::File(File {
                                 name: args[1].to_string(),
                                 size: args[0].parse().unwrap(),
@@ -228,18 +228,13 @@ fn main() {
     let file_content =
         fs::read_to_string(file_path).expect("Should have been able to read the file");
     let commands = parse_commands(&file_content);
-    println!("{:?}", commands);
 
     let root = parse_file_system_entry(commands);
     println!("{:?}", PrettyNode(&root.borrow()));
 
-    let flat_dirs = root.borrow().get_flat_dirs();
-    let small_dirs: Vec<&SizedDirectory> = flat_dirs
-        .iter()
-        .filter(|dir| dir.size < 100_000)
-        .map(|dir| dir)
-        .collect();
-    println!("{:?}", small_dirs);
+    let flat_dirs = root.borrow().list_all_dirs_sized_flat();
+    let small_dirs: Vec<&SizedDirectory> =
+        flat_dirs.iter().filter(|dir| dir.size < 100_000).collect();
 
     println!("{}", small_dirs.len());
 }
