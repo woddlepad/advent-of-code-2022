@@ -30,9 +30,20 @@ fn get_rps_state_value(state: &RPSState) -> i8 {
     }
 }
 
+fn get_random_throw() -> RPSThrow {
+    use rand::Rng;
+    let mut rng = rand::thread_rng();
+    let throw = match rng.gen_range(0..3) {
+        0 => RPSThrow::Rock,
+        1 => RPSThrow::Paper,
+        _ => RPSThrow::Scissors,
+    };
+    return throw;
+}
+
 fn main() {
     let throw = RPSThrow::Paper;
-    let other_throw = RPSThrow::Rock;
+    let other_throw = get_random_throw();
     let result = get_rps_state(&throw, &other_throw);
     let value = get_rps_state_value(&result);
     println!(
